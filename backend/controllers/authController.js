@@ -60,7 +60,14 @@ exports.login = async (req, res) => {
             role: user.role
         };
 
-        const token = jwt.sign(payload, process.env.JWT_SECRET || 'your_jwt_secret_key_here', { expiresIn: '1d' });
+        // Strict 30-minute session for owners and managers, 1 day for others
+        const expiresIn = (user.role === 'owner' || user.role === 'manager') ? '30m' : '1d';
+
+        const token = jwt.sign(
+            payload,
+            process.env.JWT_SECRET || 'your_jwt_secret_key_here',
+            { expiresIn }
+        );
 
         res.json({
             token,

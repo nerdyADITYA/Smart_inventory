@@ -100,7 +100,7 @@ exports.getPrediction = async (req, res) => {
 
         res.json(responseData);
     } catch (err) {
-        console.error('Error calling ML service:', err.message);
+        console.error('Error calling ML service:', err.response?.data || err.message);
         res.status(500).json({ message: 'Error retrieving prediction' });
     } finally {
         if (conn) conn.release();
@@ -159,8 +159,8 @@ exports.getForecast = async (req, res) => {
         res.json(mlResponse.data);
 
     } catch (err) {
-        console.error('Error calling ML forecast service:', err.message);
-        res.status(500).json({ message: 'Error retrieving forecast' });
+        console.error('Error calling ML forecast service:', err.response?.data || err.message);
+        res.status(500).json({ message: 'Error generating forecast' });
     } finally {
         if (conn) conn.release();
     }
@@ -222,7 +222,7 @@ exports.getClassifications = async (req, res) => {
         res.json(mlResponse.data);
 
     } catch (err) {
-        console.error('Error calling ML classification service:', err.message);
+        console.error('Error calling ML classification service:', err.response?.data || err.message);
         res.status(500).json({ message: 'Error retrieving classifications' });
     } finally {
         if (conn) conn.release();
@@ -282,8 +282,8 @@ exports.getDeadStock = async (req, res) => {
         res.json(mlResponse.data);
 
     } catch (err) {
-        console.error('Error calling ML dead-stock service:', err.message);
-        res.status(500).json({ message: 'Error retrieving dead stock analysis' });
+        console.error('Error calling ML dead-stock service:', err.response?.data || err.message);
+        res.status(500).json({ message: 'Error retrieving dead stock alerts' });
     } finally {
         if (conn) conn.release();
     }

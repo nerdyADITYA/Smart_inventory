@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LayoutDashboard, Package, Warehouse, ShoppingCart, LogOut, Users, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Package, Warehouse, ShoppingCart, LogOut, Users, Menu, X, Clock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const Layout = () => {
     const navigate = useNavigate();
-    const { user, logout } = useAuth();
+    const { user, logout, sessionExp } = useAuth();
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [timeLeft, setTimeLeft] = useState(null);
 
     // Close sidebar on mobile when window is resized to desktop
     useEffect(() => {
@@ -30,6 +31,30 @@ const Layout = () => {
         logout();
         navigate('/login');
     };
+
+    // Calculate session countdown
+    useEffect(() => {
+        if (!sessionExp || (user?.role !== 'owner' && user?.role !== 'manager')) {
+            setTimeout(() => setTimeLeft(null), 0);
+            return;
+        }
+
+        const updateTimer = () => {
+            const ms = sessionExp - Date.now();
+            if (ms <= 0) {
+                setTimeLeft('00:00');
+            } else {
+                const mins = Math.floor(ms / 60000);
+                const secs = Math.floor((ms % 60000) / 1000);
+                setTimeLeft(`${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`);
+            }
+        };
+
+        updateTimer(); // initial call
+        const interval = setInterval(updateTimer, 1000);
+
+        return () => clearInterval(interval);
+    }, [sessionExp, user]);
 
     const navItems = [
         { name: 'Dashboard', path: '/', icon: LayoutDashboard },
@@ -143,6 +168,18 @@ const Layout = () => {
                         <h2 className="text-lg font-medium text-slate-300 hidden sm:block">Overview</h2>
                     </div>
                     <div className="flex items-center space-x-3 sm:space-x-6">
+
+                        {/* Session Timer Component */}
+                        {timeLeft && (
+                            <div className="hidden sm:flex items-center px-3 py-1.5 bg-slate-800/80 border border-slate-700/50 rounded-lg shadow-sm">
+                                <Clock className="w-4 h-4 text-purple-400 mr-2" />
+                                <div className="flex flex-col">
+                                    <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider leading-none mb-0.5">Session</span>
+                                    <span className="text-sm font-medium text-slate-200 leading-none">{timeLeft}</span>
+                                </div>
+                            </div>
+                        )}
+
                         <div className="hidden sm:flex flex-col items-end mr-2">
                             <span className="text-sm font-medium text-slate-200">{user?.name || 'User'}</span>
                             <span className="text-xs text-slate-500">{user?.role || 'Guest'}</span>

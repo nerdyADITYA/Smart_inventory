@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const axios = require('axios');
 require('dotenv').config();
 
 const app = express();
@@ -19,6 +20,11 @@ app.use('/api/stock-movements', require('./routes/stock-movements'));
 app.use('/api/purchase-orders', require('./routes/purchase-orders'));
 app.use('/api/analytics', require('./routes/analytics'));
 
+// ML Service Status Endpoint
+app.get('/api/ml-status', (req, res) => {
+    res.json({ isRunning: isMlServiceRunning });
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
     console.error(err.stack);
@@ -26,6 +32,29 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000;
+const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://localhost:8000';
+
+let isMlServiceRunning = null;
+
+const checkMlService = async () => {
+    try {
+        await axios.get(ML_SERVICE_URL);
+        if (isMlServiceRunning !== true) {
+            console.log('✅ ML service is running.');
+            isMlServiceRunning = true;
+        }
+    } catch (error) {
+        if (isMlServiceRunning !== false) {
+            console.log('❌ ML service is not running. Start the ML service or wait for a few minutes.');
+            isMlServiceRunning = false;
+        }
+    }
+};
+
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
+
+    // Initial check and periodic polling
+    checkMlService();
+    setInterval(checkMlService, 10000);
 });
