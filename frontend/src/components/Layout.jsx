@@ -3,6 +3,7 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LayoutDashboard, Package, Warehouse, ShoppingCart, LogOut, Users, Menu, X, Clock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import api from '../api';
 
 const Layout = () => {
     const navigate = useNavigate();
@@ -16,11 +17,9 @@ const Layout = () => {
     useEffect(() => {
         const checkMlStatus = async () => {
             try {
-                // Assuming backend is on port 5000 based on standard setup or proxy
-                const response = await fetch('http://localhost:5000/api/ml-status');
-                if (response.ok) {
-                    const data = await response.json();
-                    setMlStatus(data.isRunning ? 'running' : 'disconnected');
+                const response = await api.get('/ml-status');
+                if (response.status === 200) {
+                    setMlStatus(response.data.isRunning ? 'running' : 'disconnected');
                 } else {
                     setMlStatus('disconnected');
                 }
