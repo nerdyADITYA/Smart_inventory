@@ -6,8 +6,7 @@ import pandas as pd
 from sklearn.linear_model import LinearRegression
 from sklearn.cluster import KMeans
 from sklearn.ensemble import IsolationForest
-from prophet import Prophet
-from prophet import Prophet
+from statsmodels.tsa.holtwinters import ExponentialSmoothing
 
 app = FastAPI(title="Smart Inventory ML Service")
 
@@ -123,27 +122,38 @@ def forecast_demand(request: ForecastRequest):
         'y': sales
     })
     
-    # Initialize and fit prophet model
-    m = Prophet(daily_seasonality=True, yearly_seasonality=False, weekly_seasonality=True)
-    m.fit(df)
+    # Use Exponential Smoothing (Holt-Winters)
+    # We use additive trend and optionally additive seasonal if enough data
+    seasonal_periods = 7 if len(sales) >= 14 else None
+    y = np.array(sales, dtype=float)
     
-    # Predict next 30 days
-    future = m.make_future_dataframe(periods=30)
-    forecast = m.predict(future)
-    
-    # Extract just the future predicted rows
-    future_forecast = forecast.tail(30).copy()
-    
+    try:
+        if seasonal_periods:
+            model = ExponentialSmoothing(y, trend='add', seasonal='add', seasonal_periods=seasonal_periods, initialization_method="estimated")
+        else:
+            model = ExponentialSmoothing(y, trend='add', initialization_method="estimated")
+        
+        fit_model = model.fit()
+        forecast_values = fit_model.forecast(30)
+    except Exception as e:
+        # Fallback to simple moving average if HW fails (e.g. perfectly flat data)
+        avg = sum(y[-7:]) / len(y[-7:]) if len(y) >= 7 else sum(y)/len(y)
+        forecast_values = np.array([avg]*30)
+        
     # Ensure no negative sales are projected
-    future_forecast['yhat'] = future_forecast['yhat'].clip(lower=0)
+    forecast_values = np.clip(forecast_values, 0, None)
     
-    pred_7d = future_forecast.head(7)['yhat'].sum()
-    pred_14d = future_forecast.head(14)['yhat'].sum()
-    pred_30d = future_forecast['yhat'].sum()
+    pred_7d = forecast_values[:7].sum()
+    pred_14d = forecast_values[:14].sum()
+    pred_30d = forecast_values.sum()
+    
+    # Generate future dates
+    last_date = pd.to_datetime(dates[-1])
+    future_dates = [last_date + pd.Timedelta(days=i) for i in range(1, 31)]
     
     # Find peak demand day in the next 30 days
-    peak_date_row = future_forecast.loc[future_forecast['yhat'].idxmax()]
-    peak_date_str = peak_date_row['ds'].strftime('%A') # e.g. "Sunday"
+    peak_idx = np.argmax(forecast_values)
+    peak_date_str = future_dates[peak_idx].strftime('%A') # e.g. "Sunday"
     
     # Formatting arrays for the frontend recharts
     # Combine actuals with forecast
@@ -158,11 +168,11 @@ def forecast_demand(request: ForecastRequest):
         })
         
     # Add futures (actual is none, yhat has value)
-    for index, row in future_forecast.iterrows():
+    for i, fut_date in enumerate(future_dates):
         chart_data.append({
-            "date": row['ds'].strftime('%Y-%m-%d'),
+            "date": fut_date.strftime('%Y-%m-%d'),
             "actual": None,
-            "predicted": round(float(row['yhat']), 1)
+            "predicted": round(float(forecast_values[i]), 1)
         })
 
     return {

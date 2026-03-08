@@ -72,10 +72,10 @@ Built with scalability, security, and user experience at the forefront, this pla
 - **Supplier Ledger:** Manage supplier contact information and view historical orders tied to each vendor.
 
 ### 3. Predictive AI & Advanced ML Analytics
-- **Machine Learning Integration:** Uses historical sales velocity combined with statistical models (Linear Regression/Moving Averages) built in Python/Scikit-Learn/Prophet.
+- **Machine Learning Integration:** Uses historical sales velocity combined with statistical models (Linear Regression/Moving Averages) built in Python/Scikit-Learn/Statsmodels.
 - **Stock-Out Prevention:** Predicts exactly *when* an item will run out of stock based on current depletion rates.
 - **Smart Reorder Quantity (EOQ):** Algorithmically calculates the Economic Order Quantity considering both holding and ordering costs.
-- **Demand Forecasting:** Utilizes Meta's Prophet model for accurate 7-day, 14-day, and 30-day demand time-series forecasting.
+- **Demand Forecasting:** Utilizes Statsmodels (Holt-Winters) for accurate 7-day, 14-day, and 30-day demand time-series forecasting.
 - **Product Velocity Classification:** Employs KMeans clustering to categorize inventory into Fast, Medium, and Slow-moving segments.
 - **Dead Stock Detection:** Uses Isolation Forest anomaly detection to identify capital tied up in stagnant inventory.
 - **Smart Purchase Generator:** One-click automated Purchase Order generation based on ML reorder recommendations.
@@ -121,7 +121,7 @@ The platform is designed around a modern Microservices-adjacent architecture. Th
 - **Data Engineering:** Pandas & NumPy for matrix operations and historical array normalization.
 - **Modeling Algorithms:**
   - Scikit-Learn (Linear Regression) for basic stock-out predictions.
-  - Prophet (by Meta) for robust time-series demand forecasting.
+  - Statsmodels (Exponential Smoothing) for robust time-series demand forecasting.
   - Scikit-Learn (KMeans) for product cluster velocity classification.
   - Scikit-Learn (Isolation Forest) for anomalous dead stock detection.
 - **Validation:** Pydantic for strict incoming REST payload typing.
@@ -438,11 +438,11 @@ Authorization: Bearer <your_jwt_string>
 
 ## 🤖 Machine Learning Overview
 
-The ML service (`ml-service/main.py`) acts as the forecasting brains. Because inventory data is highly numeric and tabular, we utilize Scikit-Learn structures and Facebook Prophet over heavy deep-learning frameworks (which would add unnecessary overhead).
+The ML service (`ml-service/main.py`) acts as the forecasting brains. Because inventory data is highly numeric and tabular, we utilize Scikit-Learn structures and Statsmodels over heavy deep-learning frameworks (which would add unnecessary overhead).
 
 - **Current Implementation Strategy:**
   - **Stock-Out & EOQ (`/predict/stock-out`):** Evaluates daily sale velocity trend and calculates the optimal Economic Order Quantity based on holding and ordering costs.
-  - **Demand Forecasting (`/forecast/demand`):** Employs the `Prophet` library to extrapolate 7, 14, and 30-day time series demand curves.
+  - **Demand Forecasting (`/forecast/demand`):** Employs the `statsmodels` library to extrapolate 7, 14, and 30-day time series demand curves.
   - **Velocity Classification (`/classify/products`):** Uses `KMeans` clustering (`n_clusters=3`) to segment products into Fast, Medium, and Slow moving based on turnover rate and sales variance.
   - **Dead Stock Detection (`/detect/dead-stock`):** Feeds current inventory holding vs days-since-last-sale into an `IsolationForest` to flag true stagnant capital vs standard slow-movers.
   
