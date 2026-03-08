@@ -82,7 +82,8 @@ exports.getPrediction = async (req, res) => {
         const ordering_cost = productCostRows.length > 0 ? Number(productCostRows[0].ordering_cost || 50) : 50;
         const holding_cost = productCostRows.length > 0 ? Number(productCostRows[0].holding_cost || 2) : 2;
 
-        const mlResponse = await axios.post(`${process.env.ML_SERVICE_URL || 'http://localhost:8000'}/predict/stock-out`, {
+        const baseUrl = (process.env.ML_SERVICE_URL || 'http://localhost:8000').replace(/\/$/, '');
+        const mlResponse = await axios.post(`${baseUrl}/predict/stock-out`, {
             product_id: parseInt(product_id),
             historical_sales: historical_sales,
             ordering_cost: ordering_cost,
@@ -150,7 +151,8 @@ exports.getForecast = async (req, res) => {
             }
         }
 
-        const mlResponse = await axios.post(`${process.env.ML_SERVICE_URL || 'http://localhost:8000'}/forecast/demand`, {
+        const baseUrl = (process.env.ML_SERVICE_URL || 'http://localhost:8000').replace(/\/$/, '');
+        const mlResponse = await axios.post(`${baseUrl}/forecast/demand`, {
             product_id: parseInt(product_id),
             historical_sales: historical_sales,
             dates: dates
@@ -215,7 +217,8 @@ exports.getClassifications = async (req, res) => {
             return res.json({ classifications: [] });
         }
 
-        const mlResponse = await axios.post(`${process.env.ML_SERVICE_URL || 'http://localhost:8000'}/classify/products`, {
+        const baseUrl = (process.env.ML_SERVICE_URL || 'http://localhost:8000').replace(/\/$/, '');
+        const mlResponse = await axios.post(`${baseUrl}/classify/products`, {
             products: productsPayload
         });
 
@@ -275,7 +278,8 @@ exports.getDeadStock = async (req, res) => {
             return res.json({ anomalies: [] });
         }
 
-        const mlResponse = await axios.post(`${process.env.ML_SERVICE_URL || 'http://localhost:8000'}/detect/dead-stock`, {
+        const baseUrl = (process.env.ML_SERVICE_URL || 'http://localhost:8000').replace(/\/$/, '');
+        const mlResponse = await axios.post(`${baseUrl}/detect/dead-stock`, {
             items: itemsPayload
         });
 
