@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Search, FileText, X, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Search, FileText, Edit2, Trash2 } from 'lucide-react';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
+import PurchaseOrderModal from '../components/PurchaseOrderModal';
 
 const PurchaseOrders = () => {
     const { user } = useAuth();
@@ -11,6 +12,7 @@ const PurchaseOrders = () => {
     const [pos, setPos] = useState([]);
     const [loading, setLoading] = useState(true);
     const [suppliers, setSuppliers] = useState([]);
+    const [products, setProducts] = useState([]);
 
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
@@ -18,13 +20,14 @@ const PurchaseOrders = () => {
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [selectedPO, setSelectedPO] = useState(null);
+
     const [saving, setSaving] = useState(false);
-    const [formData, setFormData] = useState({ supplier_id: '', total_amount: '', status: 'PENDING' });
 
     useEffect(() => {
         fetchPOs();
         if (canManagePOs) {
             fetchSuppliers();
+            fetchProducts();
         }
     }, [canManagePOs]);
 
@@ -48,40 +51,27 @@ const PurchaseOrders = () => {
         }
     };
 
-    const handleCreatePO = async (e) => {
-        e.preventDefault();
-        setSaving(true);
+    const fetchProducts = async () => {
         try {
-            await api.post('/purchase-orders', {
-                supplier_id: formData.supplier_id,
-                total_amount: parseFloat(formData.total_amount) || 0,
-                status: formData.status
-            });
-            setShowCreateModal(false);
-            setFormData({ supplier_id: '', total_amount: '', status: 'PENDING' });
-            fetchPOs();
+            const res = await api.get('/products');
+            setProducts(res.data);
         } catch (err) {
-            console.error('Error creating PO:', err);
-            alert(err.response?.data?.message || 'Error creating PO');
-        } finally {
-            setSaving(false);
+            console.error(err);
         }
     };
 
-    const handleEditPO = async (e) => {
-        e.preventDefault();
+    const handleSavePO = async (poData, isEdit) => {
         setSaving(true);
         try {
-            await api.put(`/purchase-orders/${selectedPO.id}`, {
-                total_amount: parseFloat(formData.total_amount) || 0,
-                status: formData.status
-            });
+            if (isEdit) {
+                await api.put(`/purchase-orders/${selectedPO.id}`, poData);
+            } else {
+                await api.post('/purchase-orders', poData);
+            }
+            setShowCreateModal(false);
             setShowEditModal(false);
             setSelectedPO(null);
             fetchPOs();
-        } catch (err) {
-            console.error('Error updating PO:', err);
-            alert(err.response?.data?.message || 'Error updating PO');
         } finally {
             setSaving(false);
         }
@@ -101,14 +91,16 @@ const PurchaseOrders = () => {
         }
     };
 
-    const openEditModal = (po) => {
-        setSelectedPO(po);
-        setFormData({
-            supplier_id: po.supplier_id,
-            total_amount: po.total_amount || '',
-            status: po.status
-        });
-        setShowEditModal(true);
+    const openEditModal = async (po) => {
+        try {
+            // Need to fetch full PO details including items to populate the new modal
+            const res = await api.get(`/purchase-orders/${po.id}`);
+            setSelectedPO(res.data);
+            setShowEditModal(true);
+        } catch (err) {
+            console.error('Error fetching PO details:', err);
+            alert(err.response?.data?.message || 'Error fetching PO details');
+        }
     };
 
     const statusColors = {
@@ -142,7 +134,6 @@ const PurchaseOrders = () => {
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                         onClick={() => {
-                            setFormData({ supplier_id: '', total_amount: '', status: 'PENDING' });
                             setShowCreateModal(true);
                         }}
                         className="flex items-center bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-xl text-sm font-medium shadow-lg shadow-purple-500/20 transition-colors"
@@ -217,7 +208,7 @@ const PurchaseOrders = () => {
                                         <td className="px-6 py-4 text-sm font-medium text-white">PO-{String(po.id).padStart(5, '0')}</td>
                                         <td className="px-6 py-4 text-sm text-slate-300">{po.supplier_name}</td>
                                         <td className="px-6 py-4 text-sm text-slate-400">{new Date(po.created_at).toLocaleDateString()}</td>
-                                        <td className="px-6 py-4 text-sm font-medium text-white">${Number(po.total_amount).toFixed(2)}</td>
+                                        <td className="px-6 py-4 text-sm font-medium text-white">₹{Number(po.total_amount).toFixed(2)}</td>
                                         <td className="px-6 py-4">
                                             <span className={`px-2.5 py-1 rounded-md text-xs font-bold border ${statusColors[po.status] || statusColors.DRAFT}`}>
                                                 {po.status}
@@ -251,170 +242,21 @@ const PurchaseOrders = () => {
                 </div>
             </div>
 
-            {/* Create PO Modal */}
-            <AnimatePresence>
-                {showCreateModal && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-                    >
-                        <motion.div
-                            initial={{ scale: 0.95, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.95, opacity: 0 }}
-                            className="bg-slate-900 border border-slate-700/50 rounded-2xl p-6 w-full max-w-md shadow-2xl"
-                        >
-                            <div className="flex justify-between items-center mb-6">
-                                <h2 className="text-xl font-bold text-white">Create Purchase Order</h2>
-                                <button onClick={() => setShowCreateModal(false)} className="text-slate-400 hover:text-white transition-colors">
-                                    <X className="w-5 h-5" />
-                                </button>
-                            </div>
-                            <form onSubmit={handleCreatePO} className="space-y-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-300 mb-1">Supplier</label>
-                                    <select
-                                        required
-                                        value={formData.supplier_id}
-                                        onChange={(e) => setFormData({ ...formData, supplier_id: e.target.value })}
-                                        className="w-full px-4 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all"
-                                    >
-                                        <option value="">Select a supplier</option>
-                                        {suppliers.map(s => (
-                                            <option key={s.id} value={s.id}>{s.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-300 mb-1">Total Amount</label>
-                                    <input
-                                        type="number"
-                                        required
-                                        min="0"
-                                        step="0.01"
-                                        value={formData.total_amount}
-                                        onChange={(e) => setFormData({ ...formData, total_amount: e.target.value })}
-                                        className="w-full px-4 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all"
-                                        placeholder="0.00"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-300 mb-1">Status</label>
-                                    <select
-                                        value={formData.status}
-                                        onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                                        className="w-full px-4 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all"
-                                    >
-                                        <option value="DRAFT">Draft</option>
-                                        <option value="PENDING">Pending</option>
-                                        <option value="APPROVED">Approved</option>
-                                        <option value="RECEIVED">Received</option>
-                                    </select>
-                                </div>
-                                <div className="flex justify-end gap-3 mt-8">
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowCreateModal(false)}
-                                        className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white transition-colors"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        disabled={saving}
-                                        className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-2 rounded-xl text-sm font-medium shadow-lg shadow-purple-500/20 transition-all disabled:opacity-50"
-                                    >
-                                        {saving ? 'Creating...' : 'Create PO'}
-                                    </button>
-                                </div>
-                            </form>
-                        </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
-            {/* Edit PO Modal */}
-            <AnimatePresence>
-                {showEditModal && selectedPO && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-                    >
-                        <motion.div
-                            initial={{ scale: 0.95, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.95, opacity: 0 }}
-                            className="bg-slate-900 border border-slate-700/50 rounded-2xl p-6 w-full max-w-md shadow-2xl"
-                        >
-                            <div className="flex justify-between items-center mb-6">
-                                <h2 className="text-xl font-bold text-white">Edit Purchase Order</h2>
-                                <button onClick={() => setShowEditModal(false)} className="text-slate-400 hover:text-white transition-colors">
-                                    <X className="w-5 h-5" />
-                                </button>
-                            </div>
-                            <form onSubmit={handleEditPO} className="space-y-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-300 mb-1">Supplier</label>
-                                    <input
-                                        type="text"
-                                        disabled
-                                        value={selectedPO.supplier_name}
-                                        className="w-full px-4 py-2 bg-slate-800/30 border border-slate-700/30 rounded-xl text-sm text-slate-500 cursor-not-allowed"
-                                        readOnly
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-300 mb-1">Total Amount</label>
-                                    <input
-                                        type="number"
-                                        required
-                                        min="0"
-                                        step="0.01"
-                                        value={formData.total_amount}
-                                        onChange={(e) => setFormData({ ...formData, total_amount: e.target.value })}
-                                        className="w-full px-4 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all"
-                                        placeholder="0.00"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-300 mb-1">Status</label>
-                                    <select
-                                        value={formData.status}
-                                        onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                                        className="w-full px-4 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all"
-                                    >
-                                        <option value="DRAFT">Draft</option>
-                                        <option value="PENDING">Pending</option>
-                                        <option value="APPROVED">Approved</option>
-                                        <option value="RECEIVED">Received</option>
-                                    </select>
-                                </div>
-                                <div className="flex justify-end gap-3 mt-8">
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowEditModal(false)}
-                                        className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white transition-colors"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        disabled={saving}
-                                        className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-2 rounded-xl text-sm font-medium shadow-lg shadow-purple-500/20 transition-all disabled:opacity-50"
-                                    >
-                                        {saving ? 'Saving...' : 'Save Changes'}
-                                    </button>
-                                </div>
-                            </form>
-                        </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-        </div >
+            {/* Shared PO Modal Component for Create and Edit */}
+            <PurchaseOrderModal
+                isOpen={showCreateModal || showEditModal}
+                onClose={() => {
+                    setShowCreateModal(false);
+                    setShowEditModal(false);
+                    setSelectedPO(null);
+                }}
+                onSave={handleSavePO}
+                initialData={showEditModal ? selectedPO : null}
+                suppliers={suppliers}
+                products={products}
+                saving={saving}
+            />
+        </div>
     );
 };
 

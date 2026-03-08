@@ -227,7 +227,7 @@ const ProductModal = ({ isOpen, onClose, onSubmit, initialData, categories, supp
                                 </div>
                                 {/* Ordering Cost */}
                                 <div className="space-y-2">
-                                    <label className="text-sm font-medium text-slate-300 ml-1">Ordering Cost ($) [ML EOQ]</label>
+                                    <label className="text-sm font-medium text-slate-300 ml-1">Ordering Cost (₹) [ML EOQ]</label>
                                     <div className="relative">
                                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                             <DollarSign className="h-4 w-4 text-emerald-500" />
@@ -247,7 +247,7 @@ const ProductModal = ({ isOpen, onClose, onSubmit, initialData, categories, supp
 
                                 {/* Holding Cost */}
                                 <div className="space-y-2">
-                                    <label className="text-sm font-medium text-slate-300 ml-1">Holding Cost ($) [ML EOQ]</label>
+                                    <label className="text-sm font-medium text-slate-300 ml-1">Holding Cost (₹) [ML EOQ]</label>
                                     <div className="relative">
                                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                             <DollarSign className="h-4 w-4 text-emerald-500" />

@@ -191,8 +191,8 @@ const Products = () => {
                                             <span className="px-2 py-1 bg-slate-700/50 rounded-md text-xs">{product.category_name || 'Uncategorized'}</span>
                                         </td>
                                         <td className="px-6 py-4 text-sm text-slate-400">{product.supplier_name || 'No Supplier'}</td>
-                                        <td className="px-6 py-4 text-sm text-slate-400">${Number(product.cost_price).toFixed(2)}</td>
-                                        <td className="px-6 py-4 text-sm text-white font-medium">${Number(product.selling_price).toFixed(2)}</td>
+                                        <td className="px-6 py-4 text-sm text-slate-400">₹{Number(product.cost_price).toFixed(2)}</td>
+                                        <td className="px-6 py-4 text-sm text-white font-medium">₹{Number(product.selling_price).toFixed(2)}</td>
                                         {canEdit && (
                                             <td className="px-6 py-4 text-sm text-right">
                                                 <button onClick={() => handleOpenEditModal(product)} className="text-slate-400 hover:text-blue-400 transition-colors p-1"><Edit2 className="w-4 h-4" /></button>

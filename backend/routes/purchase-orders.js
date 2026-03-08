@@ -6,6 +6,7 @@ const { authenticateToken, authorizeRole } = require('../middlewares/authMiddlew
 router.use(authenticateToken);
 
 router.get('/', purchaseOrdersController.getAllPurchaseOrders);
+router.get('/:id', purchaseOrdersController.getPurchaseOrderById);
 router.post('/', authorizeRole('owner', 'manager'), purchaseOrdersController.createPurchaseOrder);
 router.post('/auto-generate', authorizeRole('owner', 'manager'), purchaseOrdersController.autoGeneratePO);
 router.put('/:id', authorizeRole('owner', 'manager'), purchaseOrdersController.updatePurchaseOrder);

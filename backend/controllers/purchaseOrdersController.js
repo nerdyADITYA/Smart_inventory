@@ -25,8 +25,54 @@ exports.getAllPurchaseOrders = async (req, res) => {
     }
 };
 
+exports.getPurchaseOrderById = async (req, res) => {
+    const poId = req.params.id;
+    let conn;
+    try {
+        conn = await pool.getConnection();
+        const poRows = await conn.query(`
+            SELECT po.*, s.name as supplier_name 
+            FROM PURCHASE_ORDERS po
+            JOIN SUPPLIERS s ON po.supplier_id = s.id
+            WHERE po.id = ?
+        `, [poId]);
+
+        if (poRows.length === 0) {
+            return res.status(404).json({ message: 'Purchase order not found' });
+        }
+
+        const po = poRows[0];
+
+        const itemRows = await conn.query(`
+            SELECT poi.*, p.name 
+            FROM PURCHASE_ORDER_ITEMS poi
+            JOIN PRODUCTS p ON poi.product_id = p.id
+            WHERE poi.purchase_order_id = ?
+        `, [poId]);
+
+        res.json({
+            ...po,
+            id: po.id.toString(),
+            supplier_id: po.supplier_id.toString(),
+            total_amount: Number(po.total_amount),
+            items: itemRows.map(item => ({
+                ...item,
+                product_id: item.product_id.toString(),
+                quantity: Number(item.ordered_quantity),
+                unit_price: Number(item.cost_price),
+                tax_percentage: Number(item.tax_percentage)
+            }))
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Server error retrieving PO details' });
+    } finally {
+        if (conn) conn.release();
+    }
+};
+
 exports.createPurchaseOrder = async (req, res) => {
-    const { supplier_id, total_amount, items, status } = req.body;
+    const { supplier_id, po_number, po_date, valid_from, valid_to, shipping_address, total_amount, items, status } = req.body;
     if (!supplier_id) {
         return res.status(400).json({ message: 'Missing required field: supplier_id' });
     }
@@ -39,8 +85,10 @@ exports.createPurchaseOrder = async (req, res) => {
         const poStatus = status || 'PENDING';
 
         const poResult = await conn.query(
-            'INSERT INTO PURCHASE_ORDERS (supplier_id, status, total_amount, created_by) VALUES (?, ?, ?, ?)',
-            [supplier_id, poStatus, total_amount || 0, req.user.id]
+            `INSERT INTO PURCHASE_ORDERS 
+            (supplier_id, po_number, po_date, valid_from, valid_to, shipping_address, status, total_amount, created_by) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [supplier_id, po_number || null, po_date || null, valid_from || null, valid_to || null, shipping_address || null, poStatus, total_amount || 0, req.user.id]
         );
 
         const poId = poResult.insertId;
@@ -48,8 +96,8 @@ exports.createPurchaseOrder = async (req, res) => {
         if (items && items.length > 0) {
             for (let item of items) {
                 await conn.query(
-                    'INSERT INTO PURCHASE_ORDER_ITEMS (purchase_order_id, product_id, ordered_quantity, cost_price) VALUES (?, ?, ?, ?)',
-                    [poId, item.product_id, item.ordered_quantity, item.cost_price]
+                    'INSERT INTO PURCHASE_ORDER_ITEMS (purchase_order_id, product_id, ordered_quantity, cost_price, tax_percentage) VALUES (?, ?, ?, ?, ?)',
+                    [poId, item.product_id, item.ordered_quantity, item.cost_price, item.tax_percentage || 0]
                 );
             }
         }
@@ -67,7 +115,7 @@ exports.createPurchaseOrder = async (req, res) => {
 
 exports.updatePurchaseOrder = async (req, res) => {
     const poId = req.params.id;
-    const { total_amount, status } = req.body;
+    const { po_number, po_date, valid_from, valid_to, shipping_address, total_amount, status } = req.body;
 
     let conn;
     try {
@@ -84,6 +132,31 @@ exports.updatePurchaseOrder = async (req, res) => {
         if (status !== undefined) {
             updateFields.push('status = ?');
             params.push(status);
+        }
+
+        if (po_number !== undefined) {
+            updateFields.push('po_number = ?');
+            params.push(po_number);
+        }
+
+        if (po_date !== undefined) {
+            updateFields.push('po_date = ?');
+            params.push(po_date);
+        }
+
+        if (valid_from !== undefined) {
+            updateFields.push('valid_from = ?');
+            params.push(valid_from);
+        }
+
+        if (valid_to !== undefined) {
+            updateFields.push('valid_to = ?');
+            params.push(valid_to);
+        }
+
+        if (shipping_address !== undefined) {
+            updateFields.push('shipping_address = ?');
+            params.push(shipping_address);
         }
 
         if (updateFields.length === 0) {

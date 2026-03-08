@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LayoutDashboard, Package, Warehouse, ShoppingCart, LogOut, Users, Menu, X, Clock } from 'lucide-react';
@@ -9,6 +9,38 @@ const Layout = () => {
     const { user, logout, sessionExp } = useAuth();
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [timeLeft, setTimeLeft] = useState(null);
+    const [mlStatus, setMlStatus] = useState('checking');
+    const prevMlStatusRef = useRef('checking');
+
+    // Poll ML Status
+    useEffect(() => {
+        const checkMlStatus = async () => {
+            try {
+                // Assuming backend is on port 5000 based on standard setup or proxy
+                const response = await fetch('http://localhost:5000/api/ml-status');
+                if (response.ok) {
+                    const data = await response.json();
+                    setMlStatus(data.isRunning ? 'running' : 'disconnected');
+                } else {
+                    setMlStatus('disconnected');
+                }
+            } catch {
+                setMlStatus('disconnected');
+            }
+        };
+
+        checkMlStatus();
+        const interval = setInterval(checkMlStatus, 10000);
+        return () => clearInterval(interval);
+    }, []);
+
+    // Reload page when ML service comes back online
+    useEffect(() => {
+        if (prevMlStatusRef.current === 'disconnected' && mlStatus === 'running') {
+            window.location.reload();
+        }
+        prevMlStatusRef.current = mlStatus;
+    }, [mlStatus]);
 
     // Close sidebar on mobile when window is resized to desktop
     useEffect(() => {
@@ -168,6 +200,19 @@ const Layout = () => {
                         <h2 className="text-lg font-medium text-slate-300 hidden sm:block">Overview</h2>
                     </div>
                     <div className="flex items-center space-x-3 sm:space-x-6">
+
+                        {/* ML Status UI Indicator */}
+                        <div className="hidden sm:flex items-center px-3 py-1.5 bg-slate-800/80 border border-slate-700/50 rounded-lg shadow-sm">
+                            <div className={`w-2 h-2 rounded-full mr-2 ${mlStatus === 'running' ? 'bg-emerald-500' :
+                                mlStatus === 'disconnected' ? 'bg-red-500 animate-pulse' :
+                                    'bg-yellow-500'
+                                }`} />
+                            <span className="text-xs font-medium text-slate-300">
+                                {mlStatus === 'running' ? 'ML Service Active' :
+                                    mlStatus === 'disconnected' ? 'ML Offline - Reconnecting...' :
+                                        'Checking Status...'}
+                            </span>
+                        </div>
 
                         {/* Session Timer Component */}
                         {timeLeft && (
