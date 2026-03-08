@@ -7,7 +7,10 @@ const pool = mariadb.createPool({
   password: process.env.DB_PASSWORD || '',
   database: process.env.DB_NAME || 'smart_inventory',
   connectionLimit: 5,
-  multipleStatements: true
+  multipleStatements: true,
+  ssl: {
+    rejectUnauthorized: false
+  }
 });
 
 module.exports = pool;
