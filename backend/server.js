@@ -20,6 +20,11 @@ app.use('/api/stock-movements', require('./routes/stock-movements'));
 app.use('/api/purchase-orders', require('./routes/purchase-orders'));
 app.use('/api/analytics', require('./routes/analytics'));
 
+// Health Check Endpoint for Cron-job
+app.get('/api/health', (req, res) => {
+    res.status(200).json({ status: 'OK' });
+});
+
 // ML Service Status Endpoint
 app.get('/api/ml-status', (req, res) => {
     res.json({ isRunning: isMlServiceRunning });
