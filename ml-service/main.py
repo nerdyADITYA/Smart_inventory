@@ -44,6 +44,10 @@ class DeadStockRequest(BaseModel):
 def read_root():
     return {"status": "ML Service is running"}
 
+@app.get("/api/health")
+def health_check():
+    return {"status": "OK"}
+
 @app.post("/predict/stock-out")
 def predict_stock_out(request: PredictionRequest):
     sales = request.historical_sales
