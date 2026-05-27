@@ -270,14 +270,27 @@ async function sendPurchaseOrderEmail(poId) {
         // 6. Setup Transporter and Mail Options / Fallback to HTTP APIs
         const resendApiKey = process.env.RESEND_API_KEY;
         const brevoApiKey = process.env.BREVO_API_KEY;
-        const emailFrom = process.env.EMAIL_FROM || 'no-reply@smartinventory.com';
+        let emailFrom = process.env.EMAIL_FROM || 'no-reply@smartinventory.com';
+
+        // Auto-fallback: Resend requires onboarding@resend.dev for unverified sandbox accounts
+        if (resendApiKey && (!emailFrom || emailFrom === 'no-reply@smartinventory.com' || emailFrom.includes('smartinventory.com'))) {
+            console.log('[MAIL] Custom domain not verified. Defaulting sender to onboarding@resend.dev for Resend sandbox mode.');
+            emailFrom = 'onboarding@resend.dev';
+        }
+
+        let emailTo = supplier.email;
+        if (resendApiKey && emailFrom === 'onboarding@resend.dev') {
+            const sandboxRecipient = process.env.EMAIL_USER || 'adikadia05@gmail.com';
+            console.log(`[MAIL] Resend sandbox mode detected. Overriding recipient "${emailTo}" to "${sandboxRecipient}" to prevent Resend 403 Validation Error.`);
+            emailTo = sandboxRecipient;
+        }
 
         if (resendApiKey) {
             console.log(`[MAIL] RESEND_API_KEY detected. Routing email via Resend HTTP API (port 443)...`);
             try {
                 const response = await axios.post('https://api.resend.com/emails', {
                     from: `"Smart Inventory System" <${emailFrom}>`,
-                    to: [supplier.email],
+                    to: [emailTo],
                     subject: `New Purchase Order Request - ${poNumberStr}`,
                     html: emailHtml
                 }, {
