@@ -8,26 +8,46 @@ async function getTransporter() {
         return cachedTransporter;
     }
 
+    const service = process.env.EMAIL_SERVICE;
     const host = process.env.EMAIL_HOST;
     const port = process.env.EMAIL_PORT;
     const user = process.env.EMAIL_USER;
     const pass = process.env.EMAIL_PASS;
 
-    if (host && user && pass) {
-        console.log(`[MAIL] Using configured SMTP transporter: ${host}:${port || 587}`);
-        cachedTransporter = nodemailer.createTransport({
-            host,
-            port: Number(port) || 587,
-            secure: Number(port) === 465,
-            auth: { user, pass }
-        });
+    if (user && pass && (service || host)) {
+        let transportConfig;
+        
+        if (service) {
+            console.log(`[MAIL] Using configured service transporter: ${service}`);
+            transportConfig = {
+                service,
+                auth: { user, pass }
+            };
+        } else if (host && (host.includes('gmail.com') || host.includes('googlemail.com'))) {
+            console.log(`[MAIL] Auto-detecting Gmail service for host: ${host}. Switching to secure SSL (port 465) via Gmail service.`);
+            transportConfig = {
+                service: 'gmail',
+                auth: { user, pass }
+            };
+        } else {
+            const isSecure = Number(port) === 465;
+            console.log(`[MAIL] Using configured SMTP transporter: ${host}:${port || (isSecure ? 465 : 587)} (secure: ${isSecure})`);
+            transportConfig = {
+                host,
+                port: Number(port) || (isSecure ? 465 : 587),
+                secure: isSecure,
+                auth: { user, pass }
+            };
+        }
+
+        cachedTransporter = nodemailer.createTransport(transportConfig);
         
         try {
-            console.log(`[MAIL] Verifying SMTP connection to ${host}...`);
+            console.log(`[MAIL] Verifying SMTP connection...`);
             await cachedTransporter.verify();
             console.log(`[MAIL] SMTP connection verified successfully.`);
         } catch (err) {
-            console.error(`[MAIL] SMTP connection verification failed for ${host}:`, err);
+            console.error(`[MAIL] SMTP connection verification failed:`, err);
         }
         return cachedTransporter;
     }
