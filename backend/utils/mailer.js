@@ -285,13 +285,29 @@ async function sendPurchaseOrderEmail(poId) {
             emailTo = sandboxRecipient;
         }
 
-        if (resendApiKey) {
-            console.log(`[MAIL] RESEND_API_KEY detected. Routing email via Resend HTTP API (port 443)...`);
-            try {
+        // Insert initial email log record before sending
+        let logId = null;
+        const subjectStr = `New Purchase Order Request - ${poNumberStr}`;
+        try {
+            const logResult = await conn.query(
+                'INSERT INTO EMAIL_LOGS (from_email, to_email, subject, body, created_at, success) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?)',
+                [emailFrom, emailTo, subjectStr, emailHtml, false]
+            );
+            logId = logResult.insertId;
+            console.log(`[MAIL] Created email log entry with ID: ${logId}`);
+        } catch (logErr) {
+            console.error('[MAIL] Failed to create email log entry in database:', logErr);
+        }
+
+        let sentSuccessfully = false;
+
+        try {
+            if (resendApiKey) {
+                console.log(`[MAIL] RESEND_API_KEY detected. Routing email via Resend HTTP API (port 443)...`);
                 const response = await axios.post('https://api.resend.com/emails', {
                     from: `"Smart Inventory System" <${emailFrom}>`,
                     to: [emailTo],
-                    subject: `New Purchase Order Request - ${poNumberStr}`,
+                    subject: subjectStr,
                     html: emailHtml
                 }, {
                     headers: {
@@ -300,17 +316,13 @@ async function sendPurchaseOrderEmail(poId) {
                     }
                 });
                 console.log(`[MAIL] Email sent successfully via Resend API. ID: ${response.data.id}`);
-            } catch (resendError) {
-                console.error(`[MAIL] Resend API call failed:`, resendError.response?.data || resendError.message);
-                throw resendError;
-            }
-        } else if (brevoApiKey) {
-            console.log(`[MAIL] BREVO_API_KEY detected. Routing email via Brevo HTTP API (port 443)...`);
-            try {
+                sentSuccessfully = true;
+            } else if (brevoApiKey) {
+                console.log(`[MAIL] BREVO_API_KEY detected. Routing email via Brevo HTTP API (port 443)...`);
                 const response = await axios.post('https://api.brevo.com/v3/smtp/email', {
                     sender: { name: "Smart Inventory System", email: emailFrom },
-                    to: [{ email: supplier.email, name: supplier.name }],
-                    subject: `New Purchase Order Request - ${poNumberStr}`,
+                    to: [{ email: emailTo, name: supplier.name }],
+                    subject: subjectStr,
                     htmlContent: emailHtml
                 }, {
                     headers: {
@@ -319,32 +331,53 @@ async function sendPurchaseOrderEmail(poId) {
                     }
                 });
                 console.log(`[MAIL] Email sent successfully via Brevo API. ID: ${response.data.messageId}`);
-            } catch (brevoError) {
-                console.error(`[MAIL] Brevo API call failed:`, brevoError.response?.data || brevoError.message);
-                throw brevoError;
+                sentSuccessfully = true;
+            } else {
+                console.log(`[MAIL] No HTTP API keys found in env. Routing email via SMTP (Nodemailer)...`);
+                console.log(`[MAIL] Initializing SMTP transporter...`);
+                const transporter = await getTransporter();
+                
+                const mailOptions = {
+                    from: `"Smart Inventory System" <${emailFrom}>`,
+                    to: emailTo,
+                    subject: subjectStr,
+                    html: emailHtml
+                };
+         
+                console.log(`[MAIL] Sending email from: "${emailFrom}" to: "${emailTo}"...`);
+                const info = await transporter.sendMail(mailOptions);
+                console.log(`[MAIL] Email sent successfully via SMTP for PO #${po.id}. Message ID: ${info.messageId}`);
+         
+                if (info.messageId && nodemailer.getTestMessageUrl) {
+                    const previewUrl = nodemailer.getTestMessageUrl(info);
+                    if (previewUrl) {
+                        console.log(`[MAIL] [Ethereal Email Preview] URL: ${previewUrl}`);
+                    }
+                }
+                sentSuccessfully = true;
             }
-        } else {
-            console.log(`[MAIL] No HTTP API keys found in env. Routing email via SMTP (Nodemailer)...`);
-            console.log(`[MAIL] Initializing SMTP transporter...`);
-            const transporter = await getTransporter();
-            
-            const mailOptions = {
-                from: `"Smart Inventory System" <${emailFrom}>`,
-                to: supplier.email,
-                subject: `New Purchase Order Request - ${poNumberStr}`,
-                html: emailHtml
-            };
-     
-            console.log(`[MAIL] Sending email from: "${emailFrom}" to: "${supplier.email}"...`);
-            const info = await transporter.sendMail(mailOptions);
-            console.log(`[MAIL] Email sent successfully via SMTP for PO #${po.id}. Message ID: ${info.messageId}`);
-     
-            if (info.messageId && nodemailer.getTestMessageUrl) {
-                const previewUrl = nodemailer.getTestMessageUrl(info);
-                if (previewUrl) {
-                    console.log(`[MAIL] [Ethereal Email Preview] URL: ${previewUrl}`);
+
+            // Update log with success
+            if (logId) {
+                await conn.query(
+                    'UPDATE EMAIL_LOGS SET success = ?, sent_at = CURRENT_TIMESTAMP WHERE id = ?',
+                    [sentSuccessfully, logId]
+                );
+            }
+        } catch (sendErr) {
+            console.error(`[MAIL] Failed to send email:`, sendErr.message);
+            // Update log with failure
+            if (logId) {
+                try {
+                    await conn.query(
+                        'UPDATE EMAIL_LOGS SET success = false, sent_at = CURRENT_TIMESTAMP WHERE id = ?',
+                        [logId]
+                    );
+                } catch (updateErr) {
+                    console.error('[MAIL] Failed to update email log status to failed:', updateErr);
                 }
             }
+            throw sendErr; // rethrow to keep original behavior
         }
 
     } catch (err) {
