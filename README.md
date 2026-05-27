@@ -91,6 +91,11 @@ Built with scalability, security, and user experience at the forefront, this pla
 - **JWT Stateless Auth:** Fast, secure, scalable JSON Web Token based authentication.
 - **Encrypted Credentials:** Salted and hashed passwords utilizing industry-standard bcrypt.
 
+### 6. Automated Supplier Email Logging
+- **Lifecycle Tracking:** Automatically logs the sending attempt, dispatch timestamp, and delivery success status of purchase order emails sent to suppliers.
+- **Detailed Audit Trail:** Stores sender (`From`), recipient (`To`), `Subject`, and full HTML `email body` to keep a complete communication ledger.
+- **Resilient Log States:** Tracks logs across all integrations (Resend API, Brevo API, SMTP, or local test fallback accounts).
+
 
 ---
 
@@ -211,6 +216,17 @@ Handles the external acquisition of stock.
 - Bound by strict state machines preventing items from being received twice.
 - Automatically creates `STOCK_MOVEMENTS` (Type: 'IN') when the state flips to `RECEIVED`.
 
+### `EMAIL_LOGS` Table
+Tracks communication logs for all outgoing supplier emails.
+- `id` (INT PK, Auto Increment)
+- `from_email` (VARCHAR)
+- `to_email` (VARCHAR)
+- `subject` (VARCHAR)
+- `body` (LONGTEXT) - Stores the full HTML email body
+- `created_at` (TIMESTAMP) - Timestamp when the email dispatch was initiated
+- `sent_at` (TIMESTAMP) - Timestamp when the dispatch finished (succeeded or failed)
+- `success` (BOOLEAN) - Status of whether the email was successfully sent
+
 
 ---
 
@@ -235,15 +251,17 @@ Handles the external acquisition of stock.
 │   │   └── stockMovementsController.js # Atomic stock movement ledger
 │   ├── middlewares/               
 │   │   └── authMiddleware.js      # JWT & RBAC interceptors
-│   └── routes/                    # Express Router definitions
-│       ├── analytics.js
-│       ├── auth.js
-│       ├── categories.js
-│       ├── inventory.js
-│       ├── locations.js
-│       ├── products.js
-│       ├── purchase-orders.js
-│       └── stock-movements.js
+│   ├── routes/                    # Express Router definitions
+│   │   ├── analytics.js
+│   │   ├── auth.js
+│   │   ├── categories.js
+│   │   ├── inventory.js
+│   │   ├── locations.js
+│   │   ├── products.js
+│   │   ├── purchase-orders.js
+│   │   └── stock-movements.js
+│   └── utils/                     # Helper Utilities
+│       └── mailer.js              # Email Dispatch & Logging Integration
 │
 ├── frontend/                      # React SPA Application
 │   ├── index.html                 # HTML Entry
