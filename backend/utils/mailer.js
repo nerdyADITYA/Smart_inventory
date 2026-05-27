@@ -21,13 +21,15 @@ async function getTransporter() {
             console.log(`[MAIL] Using configured service transporter: ${service}`);
             transportConfig = {
                 service,
-                auth: { user, pass }
+                auth: { user, pass },
+                family: 4 // Force IPv4 to prevent ENETUNREACH on cloud networks lacking IPv6 support
             };
         } else if (host && (host.includes('gmail.com') || host.includes('googlemail.com'))) {
             console.log(`[MAIL] Auto-detecting Gmail service for host: ${host}. Switching to secure SSL (port 465) via Gmail service.`);
             transportConfig = {
                 service: 'gmail',
-                auth: { user, pass }
+                auth: { user, pass },
+                family: 4 // Force IPv4 to prevent ENETUNREACH on cloud networks lacking IPv6 support
             };
         } else {
             const isSecure = Number(port) === 465;
@@ -36,7 +38,8 @@ async function getTransporter() {
                 host,
                 port: Number(port) || (isSecure ? 465 : 587),
                 secure: isSecure,
-                auth: { user, pass }
+                auth: { user, pass },
+                family: 4 // Force IPv4 to prevent ENETUNREACH on cloud networks lacking IPv6 support
             };
         }
 
