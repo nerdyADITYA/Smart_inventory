@@ -1,5 +1,6 @@
 const nodemailer = require('nodemailer');
 const pool = require('../db');
+const axios = require('axios');
 
 let cachedTransporter = null;
 
@@ -266,26 +267,70 @@ async function sendPurchaseOrderEmail(poId) {
             </html>
         `;
 
-        // 6. Setup Transporter and Mail Options
-        console.log(`[MAIL] Initializing SMTP transporter...`);
-        const transporter = await getTransporter();
+        // 6. Setup Transporter and Mail Options / Fallback to HTTP APIs
+        const resendApiKey = process.env.RESEND_API_KEY;
+        const brevoApiKey = process.env.BREVO_API_KEY;
         const emailFrom = process.env.EMAIL_FROM || 'no-reply@smartinventory.com';
-        
-        const mailOptions = {
-            from: `"Smart Inventory System" <${emailFrom}>`,
-            to: supplier.email,
-            subject: `New Purchase Order Request - ${poNumberStr}`,
-            html: emailHtml
-        };
- 
-        console.log(`[MAIL] Sending email from: "${emailFrom}" to: "${supplier.email}"...`);
-        const info = await transporter.sendMail(mailOptions);
-        console.log(`[MAIL] Email sent successfully for PO #${po.id}. Message ID: ${info.messageId}`);
- 
-        if (info.messageId && nodemailer.getTestMessageUrl) {
-            const previewUrl = nodemailer.getTestMessageUrl(info);
-            if (previewUrl) {
-                console.log(`[MAIL] [Ethereal Email Preview] URL: ${previewUrl}`);
+
+        if (resendApiKey) {
+            console.log(`[MAIL] RESEND_API_KEY detected. Routing email via Resend HTTP API (port 443)...`);
+            try {
+                const response = await axios.post('https://api.resend.com/emails', {
+                    from: `"Smart Inventory System" <${emailFrom}>`,
+                    to: [supplier.email],
+                    subject: `New Purchase Order Request - ${poNumberStr}`,
+                    html: emailHtml
+                }, {
+                    headers: {
+                        'Authorization': `Bearer ${resendApiKey}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                console.log(`[MAIL] Email sent successfully via Resend API. ID: ${response.data.id}`);
+            } catch (resendError) {
+                console.error(`[MAIL] Resend API call failed:`, resendError.response?.data || resendError.message);
+                throw resendError;
+            }
+        } else if (brevoApiKey) {
+            console.log(`[MAIL] BREVO_API_KEY detected. Routing email via Brevo HTTP API (port 443)...`);
+            try {
+                const response = await axios.post('https://api.brevo.com/v3/smtp/email', {
+                    sender: { name: "Smart Inventory System", email: emailFrom },
+                    to: [{ email: supplier.email, name: supplier.name }],
+                    subject: `New Purchase Order Request - ${poNumberStr}`,
+                    htmlContent: emailHtml
+                }, {
+                    headers: {
+                        'api-key': brevoApiKey,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                console.log(`[MAIL] Email sent successfully via Brevo API. ID: ${response.data.messageId}`);
+            } catch (brevoError) {
+                console.error(`[MAIL] Brevo API call failed:`, brevoError.response?.data || brevoError.message);
+                throw brevoError;
+            }
+        } else {
+            console.log(`[MAIL] No HTTP API keys found in env. Routing email via SMTP (Nodemailer)...`);
+            console.log(`[MAIL] Initializing SMTP transporter...`);
+            const transporter = await getTransporter();
+            
+            const mailOptions = {
+                from: `"Smart Inventory System" <${emailFrom}>`,
+                to: supplier.email,
+                subject: `New Purchase Order Request - ${poNumberStr}`,
+                html: emailHtml
+            };
+     
+            console.log(`[MAIL] Sending email from: "${emailFrom}" to: "${supplier.email}"...`);
+            const info = await transporter.sendMail(mailOptions);
+            console.log(`[MAIL] Email sent successfully via SMTP for PO #${po.id}. Message ID: ${info.messageId}`);
+     
+            if (info.messageId && nodemailer.getTestMessageUrl) {
+                const previewUrl = nodemailer.getTestMessageUrl(info);
+                if (previewUrl) {
+                    console.log(`[MAIL] [Ethereal Email Preview] URL: ${previewUrl}`);
+                }
             }
         }
 
