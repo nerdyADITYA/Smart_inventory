@@ -114,8 +114,10 @@ const PurchaseOrders = () => {
         .filter(po => {
             const searchLower = searchTerm.toLowerCase();
             const poIdString = `po-${String(po.id).padStart(5, '0')}`.toLowerCase();
+            const poNumberString = (po.po_number || '').toLowerCase();
             const matchesSearch = po.supplier_name.toLowerCase().includes(searchLower) ||
                 poIdString.includes(searchLower) ||
+                poNumberString.includes(searchLower) ||
                 String(po.id).includes(searchLower);
             const matchesStatus = statusFilter === '' || po.status === statusFilter;
             return matchesSearch && matchesStatus;
@@ -175,7 +177,7 @@ const PurchaseOrders = () => {
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="bg-slate-800/50 text-slate-400 text-xs uppercase tracking-wider">
-                                <th className="px-6 py-4 font-medium">PO ID</th>
+                                <th className="px-6 py-4 font-medium">PO Number</th>
                                 <th className="px-6 py-4 font-medium">Supplier</th>
                                 <th className="px-6 py-4 font-medium">Date Created</th>
                                 <th className="px-6 py-4 font-medium">Total Amount</th>
@@ -205,7 +207,7 @@ const PurchaseOrders = () => {
                                         transition={{ delay: idx * 0.05 }}
                                         key={po.id} className="hover:bg-slate-800/30 transition-colors group"
                                     >
-                                        <td className="px-6 py-4 text-sm font-medium text-white">PO-{String(po.id).padStart(5, '0')}</td>
+                                        <td className="px-6 py-4 text-sm font-medium text-white">{po.po_number || `PO-${String(po.id).padStart(5, '0')}`}</td>
                                         <td className="px-6 py-4 text-sm text-slate-300">{po.supplier_name}</td>
                                         <td className="px-6 py-4 text-sm text-slate-400">{new Date(po.created_at).toLocaleDateString()}</td>
                                         <td className="px-6 py-4 text-sm font-medium text-white">₹{Number(po.total_amount).toFixed(2)}</td>
