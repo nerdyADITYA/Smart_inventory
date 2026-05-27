@@ -7,6 +7,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.cluster import KMeans
 from sklearn.ensemble import IsolationForest
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
+import datetime
 
 app = FastAPI(title="Smart Inventory ML Service")
 
@@ -40,6 +41,18 @@ class DeadStockItem(BaseModel):
 class DeadStockRequest(BaseModel):
     items: List[DeadStockItem]
 
+class BatchItem(BaseModel):
+    batch_number: str
+    expiry_date: str
+    quantity: int
+
+class ExpiryRiskRequest(BaseModel):
+    product_id: int
+    current_stock: int
+    predicted_daily_sales: float
+    daily_sales_std: float
+    batches: List[BatchItem]
+
 @app.get("/")
 def read_root():
     return {"status": "ML Service is running"}
@@ -61,6 +74,7 @@ def predict_stock_out(request: PredictionRequest):
         h_cost = max(0.01, request.holding_cost)
         o_cost = request.ordering_cost
         eoq = np.sqrt((2 * expected_demand * o_cost) / h_cost) if expected_demand > 0 else 0
+        std_sales = np.std(sales) if sales else 0.0
 
         return {
             "product_id": request.product_id,
@@ -68,7 +82,8 @@ def predict_stock_out(request: PredictionRequest):
             "stock_out_days": 30 if avg_sale == 0 else "N/A - insufficient data",
             "recommended_reorder": round(eoq, 0),
             "expected_demand_14d": round(expected_demand, 0),
-            "confidence": "Low"
+            "confidence": "Low",
+            "daily_sales_std": round(float(std_sales), 2)
         }
         
     # Prepare data for Simple Linear Regression
@@ -97,10 +112,25 @@ def predict_stock_out(request: PredictionRequest):
     o_cost = request.ordering_cost
     eoq = np.sqrt((2 * expected_demand * o_cost) / h_cost) if expected_demand > 0 else 0
     
-    # Determine confidence 
-    r_sq = model.score(X, y)
-    confidence = "High" if r_sq > 0.7 else "Medium"
-    if r_sq < 0.3:
+    # Determine confidence based on Coefficient of Variation (CV) & sample size (replaces R-squared)
+    mean_sales = np.mean(sales)
+    std_sales = np.std(sales)
+    cv = std_sales / mean_sales if mean_sales > 0 else 0.0
+    n_samples = len(sales)
+    
+    if n_samples >= 7:
+        if cv < 0.35:
+            confidence = "High"
+        elif cv <= 0.65:
+            confidence = "Medium"
+        else:
+            confidence = "Low"
+    elif n_samples >= 3:
+        if cv <= 0.45:
+            confidence = "Medium"
+        else:
+            confidence = "Low"
+    else:
         confidence = "Low"
     
     return {
@@ -109,7 +139,8 @@ def predict_stock_out(request: PredictionRequest):
         "recommended_reorder": round(eoq, 0),
         "expected_demand_14d": round(expected_demand, 0),
         "confidence": confidence,
-        "model_used": "Linear Regression + EOQ"
+        "model_used": "Linear Regression + EOQ",
+        "daily_sales_std": round(float(std_sales), 2)
     }
 
 @app.post("/forecast/demand")
@@ -278,6 +309,91 @@ def detect_dead_stock(request: DeadStockRequest):
                  })
                  
     return {"anomalies": anomalies}
+
+@app.post("/predict/expiry-risk")
+def predict_expiry_risk(request: ExpiryRiskRequest):
+    predicted_daily_sales = request.predicted_daily_sales
+    daily_sales_std = request.daily_sales_std
+    batches = request.batches
+    
+    # Sort batches by expiry date
+    sorted_batches = sorted(batches, key=lambda b: b.expiry_date)
+    today = datetime.date.today()
+    
+    cumulative_qty = 0
+    results = []
+    
+    for batch in sorted_batches:
+        try:
+            exp_date = datetime.datetime.strptime(batch.expiry_date, "%Y-%m-%d").date()
+        except ValueError:
+            # Fallback for ISO strings containing timestamps
+            try:
+                exp_date = datetime.datetime.strptime(batch.expiry_date.split('T')[0], "%Y-%m-%d").date()
+            except ValueError:
+                exp_date = today
+                
+        days_to_expiry = (exp_date - today).days
+        
+        if days_to_expiry <= 0:
+            results.append({
+                "batch_number": batch.batch_number,
+                "expiry_date": batch.expiry_date,
+                "quantity": batch.quantity,
+                "days_to_expiry": days_to_expiry,
+                "expected_waste": batch.quantity,
+                "waste_percentage": 100.0,
+                "risk_level": "High",
+                "confidence": "High",
+                "reason": "Batch is already expired."
+            })
+            continue
+            
+        cumulative_qty += batch.quantity
+        expected_sales = days_to_expiry * predicted_daily_sales
+        std_cumulative_sales = np.sqrt(days_to_expiry) * daily_sales_std
+        
+        # FIFO Allocation logic for waste
+        if expected_sales >= cumulative_qty:
+            expected_waste = 0.0
+        else:
+            expected_waste = min(float(batch.quantity), cumulative_qty - expected_sales)
+            
+        waste_percentage = round((expected_waste / batch.quantity) * 100, 1)
+        
+        # Risk level logic
+        if waste_percentage >= 50.0:
+            risk_level = "High"
+        elif waste_percentage >= 15.0:
+            risk_level = "Medium"
+        else:
+            risk_level = "Low"
+            
+        # Confidence score based on prediction interval / CV of cumulative sales
+        if std_cumulative_sales > 0:
+            cv_cumulative = std_cumulative_sales / expected_sales if expected_sales > 0 else 1.0
+            if cv_cumulative < 0.25:
+                confidence = "High"
+            elif cv_cumulative <= 0.6:
+                confidence = "Medium"
+            else:
+                confidence = "Low"
+        else:
+            confidence = "High"
+            
+        results.append({
+            "batch_number": batch.batch_number,
+            "expiry_date": batch.expiry_date,
+            "quantity": batch.quantity,
+            "days_to_expiry": days_to_expiry,
+            "expected_waste": round(expected_waste, 1),
+            "waste_percentage": waste_percentage,
+            "risk_level": risk_level,
+            "confidence": confidence,
+            "reason": f"Expected to waste {round(expected_waste, 1)} units ({waste_percentage}%) before expiry in {days_to_expiry} days."
+        })
+        
+    return {"expiry_risks": results}
 
 if __name__ == "__main__":
     import uvicorn

@@ -1,4 +1,5 @@
 const pool = require('../db');
+const { sendPurchaseOrderEmail } = require('../utils/mailer');
 
 exports.getAllPurchaseOrders = async (req, res) => {
     let conn;
@@ -103,6 +104,10 @@ exports.createPurchaseOrder = async (req, res) => {
         }
 
         await conn.commit();
+        
+        // Trigger email notification asynchronously
+        sendPurchaseOrderEmail(poId).catch(err => console.error('Error sending PO email:', err));
+
         res.status(201).json({ message: 'Purchase Order created', id: poId.toString() });
     } catch (err) {
         console.error(err);
@@ -229,6 +234,10 @@ exports.autoGeneratePO = async (req, res) => {
         );
 
         await conn.commit();
+        
+        // Trigger email notification asynchronously
+        sendPurchaseOrderEmail(poId).catch(err => console.error('Error sending auto PO email:', err));
+
         res.status(201).json({
             message: 'Purchase Order auto-generated successfully',
             po_id: poId.toString()

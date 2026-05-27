@@ -45,21 +45,28 @@ const Dashboard = () => {
     // Anomaly Detection Stat
     const [deadStock, setDeadStock] = useState([]);
 
+    // Expiry Risk Stat
+    const [expiryRisk, setExpiryRisk] = useState([]);
+
     // Auto PO state
     const [poLoading, setPoLoading] = useState(false);
 
     useEffect(() => {
         const fetchStats = async () => {
             try {
-                const [dashRes, prodRes, deadRes] = await Promise.all([
+                const [dashRes, prodRes, deadRes, expiryRes] = await Promise.all([
                     api.get('/analytics/dashboard'),
                     api.get('/products'),
-                    api.get('/analytics/dead-stock').catch(() => ({ data: { anomalies: [] } }))
+                    api.get('/analytics/dead-stock').catch(() => ({ data: { anomalies: [] } })),
+                    api.get('/analytics/expiry-risk').catch(() => ({ data: { expiry_risks: [] } }))
                 ]);
                 setStats(dashRes.data);
                 setProducts(prodRes.data);
                 if (deadRes.data && deadRes.data.anomalies) {
                     setDeadStock(deadRes.data.anomalies);
+                }
+                if (expiryRes.data && expiryRes.data.expiry_risks) {
+                    setExpiryRisk(expiryRes.data.expiry_risks);
                 }
             } catch (err) {
                 console.error(err);
@@ -219,6 +226,57 @@ const Dashboard = () => {
                 )}
             </AnimatePresence>
 
+            {/* Expiry Risk Alert Banner */}
+            <AnimatePresence>
+                {expiryRisk.length > 0 && (
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-start space-x-4 shadow-lg shadow-amber-500/5 mt-6"
+                    >
+                        <div className="bg-amber-500/20 p-2 rounded-lg shrink-0 mt-0.5">
+                            <AlertTriangle className="w-5 h-5 text-amber-500" />
+                        </div>
+                        <div className="flex-1">
+                            <div className="flex justify-between items-center mb-1">
+                                <h4 className="text-amber-400 font-bold text-sm">Batch Expiry Risk Alerts (FIFO Waste Model)</h4>
+                                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-xs font-semibold border border-amber-500/30">
+                                    {expiryRisk.length} Batches Flagged
+                                </span>
+                            </div>
+                            <p className="text-slate-400 text-sm mb-3">
+                                The ML service predicts these batches will expire before demand can consume their quantities under FIFO order, leading to inventory waste.
+                            </p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                {expiryRisk.map((item, idx) => (
+                                    <div key={idx} className="bg-slate-900/50 rounded-lg p-3 border border-amber-500/20 flex flex-col justify-between">
+                                        <div>
+                                            <div className="flex justify-between items-start mb-1">
+                                                <span className="text-white font-medium text-sm truncate pr-2" title={item.product_name}>{item.product_name}</span>
+                                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase ${item.risk_level === 'High' ? 'bg-red-500 text-white' : 'bg-amber-500 text-white'}`}>
+                                                    {item.risk_level} Risk
+                                                </span>
+                                            </div>
+                                            <div className="flex justify-between text-xs text-slate-500 mt-1">
+                                                <span>Batch: {item.batch_number}</span>
+                                                <span>Qty: {item.quantity}</span>
+                                            </div>
+                                            <p className="text-xs text-slate-400 mt-2 leading-relaxed" title={item.reason}>
+                                                {item.reason}
+                                            </p>
+                                        </div>
+                                        <div className="mt-2 pt-2 border-t border-slate-800 flex justify-between items-center text-[10px]">
+                                            <span className="text-slate-500">Confidence: <span className="font-semibold text-slate-300">{item.confidence}</span></span>
+                                            <span className="text-red-400 font-medium font-mono">Waste: {item.expected_waste} u ({item.waste_percentage}%)</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8 auto-rows-fr">
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
@@ -336,7 +394,11 @@ const Dashboard = () => {
                                             </div>
                                             <div className="flex justify-between items-center bg-slate-900/40 p-3 rounded-lg border border-slate-700/50">
                                                 <span className="text-sm text-slate-400">ML Confidence</span>
-                                                <span className={`text-sm font-semibold ${prediction.confidence === 'High' ? 'text-emerald-400' : 'text-amber-400'}`}>{prediction.confidence}</span>
+                                                <span className={`text-sm font-semibold ${
+                                                    prediction.confidence === 'High' ? 'text-emerald-400' :
+                                                    prediction.confidence === 'Medium' ? 'text-amber-400' :
+                                                    'text-red-400'
+                                                }`}>{prediction.confidence}</span>
                                             </div>
                                         </div>
                                     </div>
